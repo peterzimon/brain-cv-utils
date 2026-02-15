@@ -1,3 +1,4 @@
+file(GLOB FILES src/*.cpp src/*.h)
 cmake_minimum_required(VERSION 3.22)
 
 # ============================================================================
@@ -29,14 +30,14 @@ pico_sdk_init()
 # Add brain-sdk which includes brain libraries
 add_subdirectory(brain-sdk)
 
-add_executable(brain-cv-utils main.cpp)
+add_executable(brain-cv-utils ${FILES})
 
 target_link_libraries(brain-cv-utils
 	pico_stdlib
 	brain-common
 	brain-ui
 	brain-io
-  brain-utils)
+	brain-utils)
 
 pico_enable_stdio_usb(brain-cv-utils 1)
 pico_enable_stdio_uart(brain-cv-utils 1)
