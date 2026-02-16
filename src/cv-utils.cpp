@@ -7,19 +7,33 @@
 CvUtils::CvUtils()
 	: button_a_(BRAIN_BUTTON_1),
 	  button_b_(BRAIN_BUTTON_2),
-	  current_mode_(Mode::kAttenuverter) {}
+	  current_mode_(Mode::kAttenuverter),
+	  mode_select_active_(false),
+	  pending_mode_(Mode::kAttenuverter) {}
 
 void CvUtils::init() {
 	// Initialize buttons
 	button_a_.init();
 	button_b_.init();
 
+	// Button A: mode-specific action, or cycle mode when in mode select
 	button_a_.set_on_press([this]() {
-		on_button_a_press();
+		if (mode_select_active_) {
+			next_mode();
+		} else {
+			on_button_a_press();
+		}
 	});
 
-	button_b_.set_on_single_tap([this]() {
-		next_mode();
+	// Button B: hold to enter mode select, release to confirm
+	button_b_.set_on_press([this]() {
+		enter_mode_select();
+	});
+
+	button_b_.set_on_release([this]() {
+		if (mode_select_active_) {
+			exit_mode_select();
+		}
 	});
 
 	// Initialize LEDs
@@ -53,6 +67,11 @@ void CvUtils::update() {
 	pots_.scan();
 	cv_in_.update();
 
+	// When in mode select, only handle mode switching (no CV processing)
+	if (mode_select_active_) {
+		return;
+	}
+
 	// Dispatch to current mode
 	switch (current_mode_) {
 		case Mode::kAttenuverter:
@@ -70,21 +89,37 @@ void CvUtils::update() {
 	}
 }
 
+void CvUtils::enter_mode_select() {
+	mode_select_active_ = true;
+	pending_mode_ = current_mode_;
+	update_mode_leds();
+	printf("Mode select: hold B, tap A to switch\n");
+}
+
+void CvUtils::exit_mode_select() {
+	mode_select_active_ = false;
+	set_mode(pending_mode_);
+	printf("Mode confirmed: %d\n", static_cast<int>(current_mode_));
+}
+
 void CvUtils::next_mode() {
-	uint8_t next = (static_cast<uint8_t>(current_mode_) + 1) % kNumModes;
-	set_mode(static_cast<Mode>(next));
+	uint8_t next = (static_cast<uint8_t>(pending_mode_) + 1) % kNumModes;
+	pending_mode_ = static_cast<Mode>(next);
+	update_mode_leds();
+	printf("Mode preview: %d\n", static_cast<int>(pending_mode_));
 }
 
 void CvUtils::set_mode(Mode mode) {
 	current_mode_ = mode;
+	pending_mode_ = mode;
 	update_mode_leds();
-	printf("Mode: %d\n", static_cast<int>(mode));
 }
 
 void CvUtils::update_mode_leds() {
-	// LEDs 0-3 indicate current mode (one lit)
+	Mode display_mode = mode_select_active_ ? pending_mode_ : current_mode_;
+	// LEDs 0-3 indicate current/pending mode (one lit)
 	for (uint8_t i = 0; i < kNumModes; i++) {
-		if (i == static_cast<uint8_t>(current_mode_)) {
+		if (i == static_cast<uint8_t>(display_mode)) {
 			leds_.on(i);
 		} else {
 			leds_.off(i);
