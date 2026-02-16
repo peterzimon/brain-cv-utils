@@ -19,12 +19,8 @@ private:
 	static constexpr uint8_t kPotDcOffset = 2;
 	static constexpr uint8_t kLedCh1 = 4;
 	static constexpr uint8_t kLedCh2 = 5;
-
-	// Fixed-point: millivolts (mV) for all signal math
-	// DAC range: 0-10000 mV, Input range: -5000 to +5000 mV
-	static constexpr int32_t kMaxOutputMv = 10000;
-	static constexpr int32_t kMaxDcOffsetMv = 5000;
-	static constexpr int32_t kBiasShiftMv = 5000;  // shift bipolar to unipolar
+	static constexpr uint16_t kDacMax = 4095;
+	static constexpr uint16_t kDacCenter = 2048;
 };
 
 #endif  // ATTENUVERTER_H_
