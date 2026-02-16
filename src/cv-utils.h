@@ -28,6 +28,8 @@ public:
 
 private:
 	// Mode switching
+	void enter_mode_select();
+	void exit_mode_select();
 	void next_mode();
 	void set_mode(Mode mode);
 	void update_mode_leds();
@@ -52,6 +54,8 @@ private:
 
 	// State
 	Mode current_mode_;
+	bool mode_select_active_;
+	Mode pending_mode_;
 };
 
 #endif  // CV_UTILS_H_
