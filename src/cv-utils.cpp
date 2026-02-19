@@ -42,7 +42,7 @@ void CvUtils::init() {
 
 	// Initialize pots (3 pots, 8-bit resolution for smooth control)
 	brain::ui::PotsConfig pot_config = brain::ui::create_default_config(3, 8);
-	pot_config.simple = true;
+	pot_config.simple = false;
 	pots_.init(pot_config);
 
 	// Initialize CV I/O

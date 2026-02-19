@@ -1,5 +1,6 @@
 #include "attenuverter.h"
 #include <stdio.h>
+#include <pico/time.h>
 
 namespace {
 int16_t clamp16(int16_t v, int16_t lo, int16_t hi) {
