@@ -42,14 +42,14 @@ void CvUtils::init() {
 
 	// Initialize pots (3 pots, 8-bit resolution for smooth control)
 	brain::ui::PotsConfig pot_config = brain::ui::create_default_config(3, 8);
-	pot_config.simple = true;
+	pot_config.simple = false;
 	pots_.init(pot_config);
 
 	// Initialize CV I/O
 	cv_in_.init();
 	cv_out_.init();
-	cv_out_.set_coupling(brain::io::AudioCvOutChannel::kChannelA, brain::io::AudioCvOutCoupling::kDcCoupled);
-	cv_out_.set_coupling(brain::io::AudioCvOutChannel::kChannelB, brain::io::AudioCvOutCoupling::kDcCoupled);
+	cv_out_.set_coupling(brain::io::AudioCvOutChannel::kChannelA, brain::io::AudioCvOutCoupling::kAcCoupled);
+	cv_out_.set_coupling(brain::io::AudioCvOutChannel::kChannelB, brain::io::AudioCvOutCoupling::kAcCoupled);
 
 	// Initialize pulse I/O
 	pulse_.begin();
@@ -75,19 +75,21 @@ void CvUtils::update() {
 	// Dispatch to current mode
 	switch (current_mode_) {
 		case Mode::kAttenuverter:
-			update_attenuverter();
+			attenuverter_.update(pots_, cv_in_, cv_out_, leds_);
 			break;
 		case Mode::kPrecisionAdder:
-			update_precision_adder();
+			// TODO: Phase 3
 			break;
 		case Mode::kSlew:
-			update_slew();
+			// TODO: Phase 4
 			break;
 		case Mode::kAdEnvelope:
-			update_ad_envelope();
+			// TODO: Phase 5
 			break;
 	}
 }
+
+// ---------- Mode select ----------
 
 void CvUtils::enter_mode_select() {
 	mode_select_active_ = true;
@@ -117,7 +119,6 @@ void CvUtils::set_mode(Mode mode) {
 
 void CvUtils::update_mode_leds() {
 	Mode display_mode = mode_select_active_ ? pending_mode_ : current_mode_;
-	// LEDs 0-3 indicate current/pending mode (one lit)
 	for (uint8_t i = 0; i < kNumModes; i++) {
 		if (i == static_cast<uint8_t>(display_mode)) {
 			leds_.on(i);
@@ -127,29 +128,11 @@ void CvUtils::update_mode_leds() {
 	}
 }
 
-// ---------- Mode stubs (Phase 2-5 will implement these) ----------
-
-void CvUtils::update_attenuverter() {
-	// TODO: Phase 2
-}
-
-void CvUtils::update_precision_adder() {
-	// TODO: Phase 3
-}
-
-void CvUtils::update_slew() {
-	// TODO: Phase 4
-}
-
-void CvUtils::update_ad_envelope() {
-	// TODO: Phase 5
-}
+// ---------- Button A ----------
 
 void CvUtils::on_button_a_press() {
-	// Dispatch to mode-specific handler
 	switch (current_mode_) {
 		case Mode::kAttenuverter:
-			// No action in attenuverter mode
 			break;
 		case Mode::kPrecisionAdder:
 			// TODO: Reset offsets to 0V
