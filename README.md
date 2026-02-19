@@ -19,7 +19,18 @@ Dual-channel attenuverter with DC offset.
 | LEDs 1–3 | CH1 VU meter (positive fills left→right, negative fills right→left) |
 | LEDs 4–6 | CH2 VU meter (same as above) |
 
-### 2. Precision Adder *(coming soon)*
+### 2. Precision Adder
+Add precise voltage offsets for octave transposition.
+
+| Control | Function |
+|---------|----------|
+| Pot 1 | CH1 octave offset — quantized −4V to +4V in 1V steps |
+| Pot 2 | CH2 octave offset — same as above |
+| Pot 3 | Fine tune — ±1 semitone, applied to both channels |
+| CV In A/B | Input signals (1V/oct) |
+| CV Out A/B | Input + offset |
+| LEDs 1–3 | CH1 offset bar (direction = +/−, brightness = magnitude) |
+| LEDs 4–6 | CH2 offset bar (same as above) |
 ### 3. Slew Limiter *(coming soon)*
 ### 4. AD Envelope *(coming soon)*
 
