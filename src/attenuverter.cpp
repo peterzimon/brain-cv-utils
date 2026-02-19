@@ -2,6 +2,10 @@
 #include <stdio.h>
 #include <pico/time.h>
 
+// C++11 ODR: constexpr static arrays need out-of-class definitions when address is taken
+constexpr uint8_t Attenuverter::kLedsCh1[];
+constexpr uint8_t Attenuverter::kLedsCh2[];
+
 namespace {
 int16_t clamp16(int16_t v, int16_t lo, int16_t hi) {
 	return v < lo ? lo : (v > hi ? hi : v);
@@ -38,7 +42,31 @@ void Attenuverter::update(brain::ui::Pots& pots, brain::io::AudioCvIn& cv_in,
 	cv_out.set_voltage(brain::io::AudioCvOutChannel::kChannelB,
 					   static_cast<float>(dac_ch2) * 10.0f / kDacMax);
 
-	// LED brightness: scale DAC value (0-4095) to 0-255
-	leds.set_brightness(kLedCh1, static_cast<uint8_t>(dac_ch1 / 16));
-	leds.set_brightness(kLedCh2, static_cast<uint8_t>(dac_ch2 / 16));
+	// VU meter LEDs: 3 per channel, bipolar display
+	update_vu_leds(static_cast<int16_t>(dac_ch1) - kDacCenter, kLedsCh1, leds);
+	update_vu_leds(static_cast<int16_t>(dac_ch2) - kDacCenter, kLedsCh2, leds);
+}
+
+void Attenuverter::update_vu_leds(int16_t dac_value, const uint8_t led_indices[3],
+								  brain::ui::Leds& leds) {
+	// Signal range ±2048, split into 3 zones of ~683 each
+	static constexpr int16_t kZone = 683;
+
+	int16_t mag = dac_value < 0 ? -dac_value : dac_value;
+
+	uint8_t b0 = static_cast<uint8_t>(clamp16(mag * 255 / kZone, 0, 255));
+	uint8_t b1 = static_cast<uint8_t>(clamp16((mag - kZone) * 255 / kZone, 0, 255));
+	uint8_t b2 = static_cast<uint8_t>(clamp16((mag - 2 * kZone) * 255 / kZone, 0, 255));
+
+	if (dac_value >= 0) {
+		// Positive: fill left→right (0→1→2)
+		leds.set_brightness(led_indices[0], b0);
+		leds.set_brightness(led_indices[1], b1);
+		leds.set_brightness(led_indices[2], b2);
+	} else {
+		// Negative: fill right→left (2→1→0)
+		leds.set_brightness(led_indices[2], b0);
+		leds.set_brightness(led_indices[1], b1);
+		leds.set_brightness(led_indices[0], b2);
+	}
 }
