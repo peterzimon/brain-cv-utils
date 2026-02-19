@@ -1,4 +1,5 @@
 #include "attenuverter.h"
+#include <stdio.h>
 
 namespace {
 int16_t clamp16(int16_t v, int16_t lo, int16_t hi) {
@@ -23,8 +24,8 @@ void Attenuverter::update(brain::ui::Pots& pots, brain::io::AudioCvIn& cv_in,
 
 	// Attenuate and shift to unsigned DAC range
 	// (in * atten) / 256 keeps result in ~12-bit range, then add center + offset
-	int16_t out_ch1 = static_cast<int16_t>((in_ch1 * atten_ch1) / 256) + dc_offset + kDacCenter;
-	int16_t out_ch2 = static_cast<int16_t>((in_ch2 * atten_ch2) / 256) + dc_offset + kDacCenter;
+	int16_t out_ch1 = static_cast<int16_t>((in_ch1 * atten_ch1) / 256) + kDacCenter + dc_offset;
+	int16_t out_ch2 = static_cast<int16_t>((in_ch2 * atten_ch2) / 256) + kDacCenter + dc_offset;
 
 	// Clamp to DAC range
 	uint16_t dac_ch1 = static_cast<uint16_t>(clamp16(out_ch1, 0, kDacMax));
