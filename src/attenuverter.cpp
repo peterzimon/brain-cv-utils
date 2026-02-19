@@ -1,6 +1,10 @@
 #include "attenuverter.h"
 
-#include <algorithm>
+namespace {
+int16_t clamp16(int16_t v, int16_t lo, int16_t hi) {
+	return v < lo ? lo : (v > hi ? hi : v);
+}
+}
 
 void Attenuverter::update(brain::ui::Pots& pots, brain::io::AudioCvIn& cv_in,
 						  brain::io::AudioCvOut& cv_out, brain::ui::Leds& leds) {
@@ -23,8 +27,8 @@ void Attenuverter::update(brain::ui::Pots& pots, brain::io::AudioCvIn& cv_in,
 	int16_t out_ch2 = static_cast<int16_t>((in_ch2 * atten_ch2) / 256) + dc_offset + kDacCenter;
 
 	// Clamp to DAC range
-	uint16_t dac_ch1 = static_cast<uint16_t>(std::clamp<int16_t>(out_ch1, 0, kDacMax));
-	uint16_t dac_ch2 = static_cast<uint16_t>(std::clamp<int16_t>(out_ch2, 0, kDacMax));
+	uint16_t dac_ch1 = static_cast<uint16_t>(clamp16(out_ch1, 0, kDacMax));
+	uint16_t dac_ch2 = static_cast<uint16_t>(clamp16(out_ch2, 0, kDacMax));
 
 	// Write to DAC (SDK expects float volts: 0-4095 → 0.0-10.0V)
 	cv_out.set_voltage(brain::io::AudioCvOutChannel::kChannelA,
