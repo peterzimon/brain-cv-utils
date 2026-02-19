@@ -26,8 +26,10 @@ void CvMixer::update(brain::ui::Pots& pots, brain::io::AudioCvIn& cv_in,
 	// Mix: scale each input by its level, sum, then apply main level
 	float mix = (in_a * level_a + in_b * level_b) * main_level;
 
-	// Clamp to output range
-	float out = clampf(mix, 0.0f, kMaxVoltage);
+	// Mix is in bipolar signal domain (-5V..+5V). Convert to DAC voltage domain
+	// (0V..10V where 5V represents 0V signal at the output stage).
+	float signal = clampf(mix, kMinSignalVoltage, kMaxSignalVoltage);
+	float out = signal + kCenterVoltage;
 
 	// Output the same mix to both channels
 	cv_out.set_voltage(brain::io::AudioCvOutChannel::kChannelA, out);
