@@ -31,12 +31,9 @@ private:
 	// Mode switching
 	void enter_mode_select();
 	void exit_mode_select();
-	void next_mode();
 	void set_mode(Mode mode);
 	void update_mode_leds();
-
-	// Button A handler
-	void on_button_a_press();
+	static Mode pot_to_mode(uint8_t pot_value);
 
 	// Hardware
 	brain::ui::Button button_a_;
@@ -54,6 +51,8 @@ private:
 	Mode current_mode_;
 	bool mode_select_active_;
 	Mode pending_mode_;
+	bool button_a_pressed_;
+	bool button_b_pressed_;
 };
 
 #endif  // CV_UTILS_H_

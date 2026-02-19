@@ -4,7 +4,7 @@ A multi-mode CV utility firmware for the [Brain](https://github.com/shmoergh/bra
 
 ## Modes
 
-The firmware has 4 modes, indicated by LEDs 1–4:
+The firmware has 4 modes:
 
 ### 1. Attenuverter (default)
 Dual-channel attenuverter with DC offset.
@@ -16,7 +16,8 @@ Dual-channel attenuverter with DC offset.
 | Pot 3 | DC offset — adds/subtracts voltage to both channels |
 | CV In A/B | Input signals |
 | CV Out A/B | Processed signals |
-| LEDs 5–6 | Output level for CH1/CH2 |
+| LEDs 1–3 | CH1 VU meter (positive fills left→right, negative fills right→left) |
+| LEDs 4–6 | CH2 VU meter (same as above) |
 
 ### 2. Precision Adder *(coming soon)*
 ### 3. Slew Limiter *(coming soon)*
@@ -24,9 +25,9 @@ Dual-channel attenuverter with DC offset.
 
 ## Switching Modes
 
-1. **Hold Button B** — enters mode select (current mode LED lit)
-2. **Tap Button A** — cycles through modes (LED follows)
-3. **Release Button B** — confirms selection
+1. **Hold both buttons** — enters mode select (LEDs 1–4 show current mode)
+2. **Turn Pot 1** — selects mode (pot range divided into 4 zones)
+3. **Release both buttons** — confirms selection, LEDs return to VU meters
 
 ## Build
 

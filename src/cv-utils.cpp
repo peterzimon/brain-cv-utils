@@ -9,31 +9,37 @@ CvUtils::CvUtils()
 	  button_b_(BRAIN_BUTTON_2),
 	  current_mode_(Mode::kAttenuverter),
 	  mode_select_active_(false),
-	  pending_mode_(Mode::kAttenuverter) {}
+	  pending_mode_(Mode::kAttenuverter),
+	  button_a_pressed_(false),
+	  button_b_pressed_(false) {}
 
 void CvUtils::init() {
 	// Initialize buttons
 	button_a_.init();
 	button_b_.init();
 
-	// Button A: mode-specific action, or cycle mode when in mode select
+	// Button A: press/release track state, enter mode select if B already held
 	button_a_.set_on_press([this]() {
-		if (mode_select_active_) {
-			next_mode();
-		} else {
-			on_button_a_press();
+		button_a_pressed_ = true;
+		if (button_b_pressed_ && !mode_select_active_) {
+			enter_mode_select();
 		}
 	});
+	button_a_.set_on_release([this]() {
+		button_a_pressed_ = false;
+		exit_mode_select();
+	});
 
-	// Button B: hold to enter mode select, release to confirm
+	// Button B: press/release track state, enter mode select if A already held
 	button_b_.set_on_press([this]() {
-		enter_mode_select();
-	});
-
-	button_b_.set_on_release([this]() {
-		if (mode_select_active_) {
-			exit_mode_select();
+		button_b_pressed_ = true;
+		if (button_a_pressed_ && !mode_select_active_) {
+			enter_mode_select();
 		}
+	});
+	button_b_.set_on_release([this]() {
+		button_b_pressed_ = false;
+		exit_mode_select();
 	});
 
 	// Initialize LEDs
@@ -67,8 +73,13 @@ void CvUtils::update() {
 	pots_.scan();
 	cv_in_.update();
 
-	// When in mode select, only handle mode switching (no CV processing)
+	// When in mode select, read POT1 to choose mode
 	if (mode_select_active_) {
+		Mode new_mode = pot_to_mode(pots_.get(0));
+		if (new_mode != pending_mode_) {
+			pending_mode_ = new_mode;
+			update_mode_leds();
+		}
 		return;
 	}
 
@@ -94,27 +105,35 @@ void CvUtils::update() {
 void CvUtils::enter_mode_select() {
 	mode_select_active_ = true;
 	pending_mode_ = current_mode_;
+	leds_.off_all();
 	update_mode_leds();
-	printf("Mode select: hold B, tap A to switch\n");
+	printf("Mode select: turn POT1 to choose mode\n");
 }
 
 void CvUtils::exit_mode_select() {
+	// Only exit when both buttons are released
+	if (button_a_pressed_ || button_b_pressed_) {
+		return;
+	}
+	if (!mode_select_active_) {
+		return;
+	}
 	mode_select_active_ = false;
+	leds_.off_all();
 	set_mode(pending_mode_);
 	printf("Mode confirmed: %d\n", static_cast<int>(current_mode_));
 }
 
-void CvUtils::next_mode() {
-	uint8_t next = (static_cast<uint8_t>(pending_mode_) + 1) % kNumModes;
-	pending_mode_ = static_cast<Mode>(next);
-	update_mode_leds();
-	printf("Mode preview: %d\n", static_cast<int>(pending_mode_));
+Mode CvUtils::pot_to_mode(uint8_t pot_value) {
+	if (pot_value < 64) return Mode::kAttenuverter;
+	if (pot_value < 128) return Mode::kPrecisionAdder;
+	if (pot_value < 192) return Mode::kSlew;
+	return Mode::kAdEnvelope;
 }
 
 void CvUtils::set_mode(Mode mode) {
 	current_mode_ = mode;
 	pending_mode_ = mode;
-	update_mode_leds();
 }
 
 void CvUtils::update_mode_leds() {
@@ -128,20 +147,3 @@ void CvUtils::update_mode_leds() {
 	}
 }
 
-// ---------- Button A ----------
-
-void CvUtils::on_button_a_press() {
-	switch (current_mode_) {
-		case Mode::kAttenuverter:
-			break;
-		case Mode::kPrecisionAdder:
-			// TODO: Reset offsets to 0V
-			break;
-		case Mode::kSlew:
-			// TODO: Toggle linked mode
-			break;
-		case Mode::kAdEnvelope:
-			// TODO: Manual trigger
-			break;
-	}
-}
