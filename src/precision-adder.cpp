@@ -5,6 +5,9 @@ constexpr uint8_t PrecisionAdder::kLedsCh1[];
 constexpr uint8_t PrecisionAdder::kLedsCh2[];
 
 namespace {
+int32_t clamp32(int32_t v, int32_t lo, int32_t hi) {
+	return v < lo ? lo : (v > hi ? hi : v);
+}
 int16_t clamp16(int16_t v, int16_t lo, int16_t hi) {
 	return v < lo ? lo : (v > hi ? hi : v);
 }
@@ -16,27 +19,26 @@ void PrecisionAdder::update(brain::ui::Pots& pots, brain::io::AudioCvIn& cv_in,
 	int8_t octave_ch1 = static_cast<int8_t>(pots.get(kPotOctaveCh1) * 9 / 256) - 4;
 	int8_t octave_ch2 = static_cast<int8_t>(pots.get(kPotOctaveCh2) * 9 / 256) - 4;
 
-	// Pot 3: fine tune — map 0-255 to -34..+34 DAC units (±1 semitone)
+	// Pot 3: fine tune — map 0-255 to ±34 DAC units (±1 semitone)
 	int16_t fine_tune = static_cast<int16_t>((static_cast<int16_t>(pots.get(kPotFineTune)) - 128) *
 											 kFineTuneMax / 128);
 
-	// Convert octave offsets to DAC units
+	// Offsets in DAC units (1 octave = 1V = kDacPerVolt DAC units)
 	int16_t offset_ch1 = static_cast<int16_t>(octave_ch1) * kDacPerVolt + fine_tune;
 	int16_t offset_ch2 = static_cast<int16_t>(octave_ch2) * kDacPerVolt + fine_tune;
 
-	// Read CV inputs (raw 0-4095)
-	uint16_t in_ch1 = cv_in.get_raw_channel_a();
-	uint16_t in_ch2 = cv_in.get_raw_channel_b();
+	// Read raw ADC and map from ADC domain to DAC domain
+	// ADC [kAdcAtMinus5V..kAdcAtPlus5V] → DAC [0..4095] (both represent -5V to +5V)
+	int32_t dac_ch1 = static_cast<int32_t>(cv_in.get_raw_channel_a() - kAdcAtMinus5V) *
+					  kDacMax / kAdcSpan;
+	int32_t dac_ch2 = static_cast<int32_t>(cv_in.get_raw_channel_b() - kAdcAtMinus5V) *
+					  kDacMax / kAdcSpan;
 
-	// Add offset
-	int16_t out_ch1 = static_cast<int16_t>(in_ch1) + offset_ch1;
-	int16_t out_ch2 = static_cast<int16_t>(in_ch2) + offset_ch2;
+	// Add offset and clamp to DAC range
+	dac_ch1 = clamp32(dac_ch1 + offset_ch1, 0, kDacMax);
+	dac_ch2 = clamp32(dac_ch2 + offset_ch2, 0, kDacMax);
 
-	// Clamp to DAC range
-	uint16_t dac_ch1 = static_cast<uint16_t>(clamp16(out_ch1, 0, kDacMax));
-	uint16_t dac_ch2 = static_cast<uint16_t>(clamp16(out_ch2, 0, kDacMax));
-
-	// Write to DAC
+	// Write to DAC (only float conversion, required by SDK API)
 	cv_out.set_voltage(brain::io::AudioCvOutChannel::kChannelA,
 					   static_cast<float>(dac_ch1) * 10.0f / kDacMax);
 	cv_out.set_voltage(brain::io::AudioCvOutChannel::kChannelB,

@@ -17,13 +17,21 @@ private:
 	static constexpr uint8_t kPotOctaveCh1 = 0;
 	static constexpr uint8_t kPotOctaveCh2 = 1;
 	static constexpr uint8_t kPotFineTune = 2;
+
 	static constexpr uint16_t kDacMax = 4095;
 
-	// 1V = 4095 / 10 ≈ 410 DAC units per volt
+	// 1V/oct: 4095 DAC units / 10V = ~410 DAC units per volt
 	static constexpr int16_t kDacPerVolt = 410;
 
-	// Fine tune range: ±1 semitone = ±1/12 volt ≈ ±34 DAC units
+	// Fine tune: ±1 semitone = ±1/12 V ≈ ±34 DAC units
 	static constexpr int16_t kFineTuneMax = 34;
+
+	// ADC raw values at calibration points, derived from SDK constants:
+	// kAdcAtMinus5V = 0.240V / 3.3V * 4095 ≈ 298
+	// kAdcAtPlus5V  = 3.000V / 3.3V * 4095 ≈ 3723
+	static constexpr uint16_t kAdcAtMinus5V = 298;
+	static constexpr uint16_t kAdcAtPlus5V = 3723;
+	static constexpr uint16_t kAdcSpan = kAdcAtPlus5V - kAdcAtMinus5V;
 
 	// LEDs: 3 per channel for offset display
 	static constexpr uint8_t kLedsCh1[3] = {0, 1, 2};
