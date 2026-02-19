@@ -1,5 +1,11 @@
 #include "precision-adder.h"
 
+#include <cstring>
+
+#include "hardware/flash.h"
+#include "hardware/regs/addressmap.h"
+#include "hardware/sync.h"
+
 // C++11 ODR: constexpr static arrays need out-of-class definitions
 constexpr uint8_t PrecisionAdder::kLedsCh1[];
 constexpr uint8_t PrecisionAdder::kLedsCh2[];
@@ -11,11 +17,44 @@ int32_t clamp32(int32_t v, int32_t lo, int32_t hi) {
 int16_t clamp16(int16_t v, int16_t lo, int16_t hi) {
 	return v < lo ? lo : (v > hi ? hi : v);
 }
+
+constexpr uint32_t kCalibrationMagic = 0x5043414C;     // "PCAL"
+constexpr uint16_t kCalibrationVersion = 1;
+constexpr uint32_t kCalibrationFlashOffset = PICO_FLASH_SIZE_BYTES - FLASH_SECTOR_SIZE;
+
+struct CalibrationStorage {
+	uint32_t magic;
+	uint16_t version;
+	int16_t trim_a;
+	int16_t trim_b;
+	uint16_t checksum;
+	uint16_t reserved;
+};
+
+uint16_t calibration_checksum(const CalibrationStorage& data) {
+	uint32_t sum = 0;
+	sum += (data.magic & 0xFFFFu);
+	sum += ((data.magic >> 16) & 0xFFFFu);
+	sum += data.version;
+	sum += static_cast<uint16_t>(data.trim_a);
+	sum += static_cast<uint16_t>(data.trim_b);
+	sum += data.reserved;
+	return static_cast<uint16_t>(sum & 0xFFFFu);
+}
+}
+
+void PrecisionAdder::init() {
+	load_calibration_from_flash();
 }
 
 void PrecisionAdder::update(brain::ui::Pots& pots, brain::io::AudioCvIn& cv_in,
 							brain::io::AudioCvOut& cv_out, brain::ui::Leds& leds,
 							bool button_a_pressed, bool button_b_pressed) {
+	const bool released_a = button_a_prev_ && !button_a_pressed;
+	const bool released_b = button_b_prev_ && !button_b_pressed;
+	button_a_prev_ = button_a_pressed;
+	button_b_prev_ = button_b_pressed;
+
 	const bool calibrating_a = button_a_pressed && !button_b_pressed;
 	const bool calibrating_b = button_b_pressed && !button_a_pressed;
 	const bool calibration_mode = calibrating_a || calibrating_b;
@@ -26,10 +65,21 @@ void PrecisionAdder::update(brain::ui::Pots& pots, brain::io::AudioCvIn& cv_in,
 		const int16_t trim_value = static_cast<int16_t>(
 			kAdcGainTrimMin + (static_cast<int32_t>(pots.get(kPotOctaveCh1)) * trim_span + 127) / 255);
 		if (calibrating_a) {
-			adc_gain_trim_a_ = trim_value;
+			if (adc_gain_trim_a_ != trim_value) {
+				adc_gain_trim_a_ = trim_value;
+				calibration_dirty_ = true;
+			}
 		} else {
-			adc_gain_trim_b_ = trim_value;
+			if (adc_gain_trim_b_ != trim_value) {
+				adc_gain_trim_b_ = trim_value;
+				calibration_dirty_ = true;
+			}
 		}
+	}
+
+	if (calibration_dirty_ && (released_a || released_b)) {
+		save_calibration_to_flash();
+		calibration_dirty_ = false;
 	}
 
 	// Pot 1/2: octave offset — map 0-255 to -4..+4 (9 steps)
@@ -135,4 +185,42 @@ void PrecisionAdder::update_calibration_leds(int16_t trim_value, brain::ui::Leds
 		leds.set_brightness(1, b1);
 		leds.set_brightness(0, b2);
 	}
+}
+
+void PrecisionAdder::load_calibration_from_flash() {
+	const auto* data =
+		reinterpret_cast<const CalibrationStorage*>(XIP_BASE + kCalibrationFlashOffset);
+
+	if (data->magic != kCalibrationMagic || data->version != kCalibrationVersion) {
+		adc_gain_trim_a_ = 0;
+		adc_gain_trim_b_ = 0;
+		return;
+	}
+	if (data->checksum != calibration_checksum(*data)) {
+		adc_gain_trim_a_ = 0;
+		adc_gain_trim_b_ = 0;
+		return;
+	}
+
+	adc_gain_trim_a_ = clamp16(data->trim_a, kAdcGainTrimMin, kAdcGainTrimMax);
+	adc_gain_trim_b_ = clamp16(data->trim_b, kAdcGainTrimMin, kAdcGainTrimMax);
+}
+
+void PrecisionAdder::save_calibration_to_flash() {
+	CalibrationStorage data;
+	data.magic = kCalibrationMagic;
+	data.version = kCalibrationVersion;
+	data.trim_a = adc_gain_trim_a_;
+	data.trim_b = adc_gain_trim_b_;
+	data.reserved = 0xFFFFu;
+	data.checksum = calibration_checksum(data);
+
+	uint8_t page_buffer[FLASH_PAGE_SIZE];
+	memset(page_buffer, 0xFF, sizeof(page_buffer));
+	memcpy(page_buffer, &data, sizeof(data));
+
+	uint32_t interrupts = save_and_disable_interrupts();
+	flash_range_erase(kCalibrationFlashOffset, FLASH_SECTOR_SIZE);
+	flash_range_program(kCalibrationFlashOffset, page_buffer, FLASH_PAGE_SIZE);
+	restore_interrupts(interrupts);
 }

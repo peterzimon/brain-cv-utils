@@ -62,6 +62,7 @@ void CvUtils::init() {
 
 	// Set initial mode
 	set_mode(Mode::kAttenuverter);
+	precision_adder_.init();
 
 	printf("CV Utils initialized\n");
 }

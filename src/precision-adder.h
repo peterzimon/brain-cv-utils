@@ -10,6 +10,7 @@
 
 class PrecisionAdder {
 public:
+	void init();
 	void update(brain::ui::Pots& pots, brain::io::AudioCvIn& cv_in,
 				brain::io::AudioCvOut& cv_out, brain::ui::Leds& leds,
 				bool button_a_pressed, bool button_b_pressed);
@@ -47,10 +48,16 @@ private:
 
 	int16_t adc_gain_trim_a_ = 0;
 	int16_t adc_gain_trim_b_ = 0;
+	bool calibration_dirty_ = false;
+	bool button_a_prev_ = false;
+	bool button_b_prev_ = false;
 
 	static void update_offset_leds(int8_t octave, const uint8_t led_indices[3],
 									brain::ui::Leds& leds);
 	static void update_calibration_leds(int16_t trim_value, brain::ui::Leds& leds);
+
+	void load_calibration_from_flash();
+	void save_calibration_to_flash();
 };
 
 #endif  // PRECISION_ADDER_H_
