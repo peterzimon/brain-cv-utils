@@ -1,0 +1,72 @@
+#include "precision-adder.h"
+
+// C++11 ODR: constexpr static arrays need out-of-class definitions
+constexpr uint8_t PrecisionAdder::kLedsCh1[];
+constexpr uint8_t PrecisionAdder::kLedsCh2[];
+
+namespace {
+int16_t clamp16(int16_t v, int16_t lo, int16_t hi) {
+	return v < lo ? lo : (v > hi ? hi : v);
+}
+}
+
+void PrecisionAdder::update(brain::ui::Pots& pots, brain::io::AudioCvIn& cv_in,
+							brain::io::AudioCvOut& cv_out, brain::ui::Leds& leds) {
+	// Pot 1/2: octave offset — map 0-255 to -4..+4 (9 steps)
+	int8_t octave_ch1 = static_cast<int8_t>(pots.get(kPotOctaveCh1) * 9 / 256) - 4;
+	int8_t octave_ch2 = static_cast<int8_t>(pots.get(kPotOctaveCh2) * 9 / 256) - 4;
+
+	// Pot 3: fine tune — map 0-255 to -34..+34 DAC units (±1 semitone)
+	int16_t fine_tune = static_cast<int16_t>((static_cast<int16_t>(pots.get(kPotFineTune)) - 128) *
+											 kFineTuneMax / 128);
+
+	// Convert octave offsets to DAC units
+	int16_t offset_ch1 = static_cast<int16_t>(octave_ch1) * kDacPerVolt + fine_tune;
+	int16_t offset_ch2 = static_cast<int16_t>(octave_ch2) * kDacPerVolt + fine_tune;
+
+	// Read CV inputs (raw 0-4095)
+	uint16_t in_ch1 = cv_in.get_raw_channel_a();
+	uint16_t in_ch2 = cv_in.get_raw_channel_b();
+
+	// Add offset
+	int16_t out_ch1 = static_cast<int16_t>(in_ch1) + offset_ch1;
+	int16_t out_ch2 = static_cast<int16_t>(in_ch2) + offset_ch2;
+
+	// Clamp to DAC range
+	uint16_t dac_ch1 = static_cast<uint16_t>(clamp16(out_ch1, 0, kDacMax));
+	uint16_t dac_ch2 = static_cast<uint16_t>(clamp16(out_ch2, 0, kDacMax));
+
+	// Write to DAC
+	cv_out.set_voltage(brain::io::AudioCvOutChannel::kChannelA,
+					   static_cast<float>(dac_ch1) * 10.0f / kDacMax);
+	cv_out.set_voltage(brain::io::AudioCvOutChannel::kChannelB,
+					   static_cast<float>(dac_ch2) * 10.0f / kDacMax);
+
+	// LED feedback: 3 LEDs per channel showing octave offset
+	update_offset_leds(octave_ch1, kLedsCh1, leds);
+	update_offset_leds(octave_ch2, kLedsCh2, leds);
+}
+
+void PrecisionAdder::update_offset_leds(int8_t octave, const uint8_t led_indices[3],
+										 brain::ui::Leds& leds) {
+	// Show octave offset using 3 LEDs as a bar display
+	// -4..-1: fill from right (LED 2→1→0), brightness by magnitude
+	// 0: all off
+	// +1..+4: fill from left (LED 0→1→2), brightness by magnitude
+	int8_t mag = octave < 0 ? -octave : octave;
+
+	// Each LED represents ~1.3 octaves, scale brightness
+	uint8_t b0 = static_cast<uint8_t>(clamp16(mag * 85, 0, 255));
+	uint8_t b1 = static_cast<uint8_t>(clamp16((mag - 1) * 85, 0, 255));
+	uint8_t b2 = static_cast<uint8_t>(clamp16((mag - 3) * 85, 0, 255));
+
+	if (octave >= 0) {
+		leds.set_brightness(led_indices[0], b0);
+		leds.set_brightness(led_indices[1], b1);
+		leds.set_brightness(led_indices[2], b2);
+	} else {
+		leds.set_brightness(led_indices[2], b0);
+		leds.set_brightness(led_indices[1], b1);
+		leds.set_brightness(led_indices[0], b2);
+	}
+}

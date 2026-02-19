@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "attenuverter.h"
+#include "precision-adder.h"
 #include "brain-io/audio-cv-in.h"
 #include "brain-io/audio-cv-out.h"
 #include "brain-io/pulse.h"
@@ -46,6 +47,7 @@ private:
 
 	// Mode handlers
 	Attenuverter attenuverter_;
+	PrecisionAdder precision_adder_;
 
 	// State
 	Mode current_mode_;
