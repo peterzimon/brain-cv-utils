@@ -6,6 +6,7 @@
 constexpr uint8_t Attenuverter::kLedsCh1[];
 constexpr uint8_t Attenuverter::kLedsCh2[];
 
+
 namespace {
 int16_t clamp16(int16_t v, int16_t lo, int16_t hi) {
 	return v < lo ? lo : (v > hi ? hi : v);
