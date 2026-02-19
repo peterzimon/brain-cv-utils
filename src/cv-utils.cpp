@@ -89,7 +89,7 @@ void CvUtils::update() {
 			attenuverter_.update(pots_, cv_in_, cv_out_, leds_);
 			break;
 		case Mode::kPrecisionAdder:
-			precision_adder_.update(pots_, cv_in_, cv_out_, leds_);
+			precision_adder_.update(pots_, cv_in_, cv_out_, leds_, button_a_pressed_, button_b_pressed_);
 			break;
 		case Mode::kSlew:
 			// TODO: Phase 4
@@ -146,4 +146,3 @@ void CvUtils::update_mode_leds() {
 		}
 	}
 }
-
