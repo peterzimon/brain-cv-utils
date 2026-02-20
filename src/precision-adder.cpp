@@ -15,7 +15,8 @@ int16_t clamp16(int16_t v, int16_t lo, int16_t hi) {
 
 void PrecisionAdder::update(brain::ui::Pots& pots, brain::io::AudioCvIn& cv_in,
 							brain::io::AudioCvOut& cv_out, brain::ui::Leds& leds,
-							Calibration& calibration, bool button_b_pressed) {
+							Calibration& calibration, bool button_b_pressed,
+							bool allow_led_updates) {
 	// Pot 1/2: octave offset — map 0-255 to -4..+4 (9 steps)
 	int8_t octave_ch1 = static_cast<int8_t>(pots.get(kPotOctaveCh1) * 9 / 256) - 4;
 	int8_t octave_ch2 = static_cast<int8_t>(pots.get(kPotOctaveCh2) * 9 / 256) - 4;
@@ -56,6 +57,10 @@ void PrecisionAdder::update(brain::ui::Pots& pots, brain::io::AudioCvIn& cv_in,
 					   static_cast<float>(dac_ch1) * 10.0f / kDacMax);
 	cv_out.set_voltage(brain::io::AudioCvOutChannel::kChannelB,
 					   static_cast<float>(dac_ch2) * 10.0f / kDacMax);
+
+	if (!allow_led_updates) {
+		return;
+	}
 
 	// LED feedback
 	update_offset_leds(octave_ch1, kLedsCh1, leds);
