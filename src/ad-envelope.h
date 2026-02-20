@@ -27,12 +27,19 @@ private:
 		kAttack,
 		kDecay
 	};
+	struct EnvelopeState {
+		Stage stage;
+		int32_t envelope_q15;
+		uint32_t stage_start_us;
+		uint32_t stage_duration_us;
+		bool gate_prev_high;
+	};
 
 	static constexpr uint8_t kPotAttack = 0;
 	static constexpr uint8_t kPotDecay = 1;
 	static constexpr uint8_t kPotShape = 2;
 
-	// Envelope output in Q15 fixed-point (0 = 0V, kQ15One = 10V)
+	// Envelope output in Q15 fixed-point signal domain (0 = 0V, kQ15One = +5V)
 	static constexpr int32_t kQ15One = 32768;
 
 	// Max envelope time ~5 seconds in microseconds
@@ -47,12 +54,13 @@ private:
 	// Apply shape curve to linear position (0..kQ15One)
 	// shape_q15: 0 = linear, kQ15One = exponential
 	static int32_t apply_shape(int32_t linear_pos_q15, uint16_t shape_q15, bool is_attack);
+	static void trigger_envelope(EnvelopeState& state, uint32_t now_us, uint32_t attack_us);
+	static bool process_envelope(EnvelopeState& state, uint32_t now_us, uint32_t decay_us,
+								 uint16_t shape_q15);
 
 	// State
-	Stage stage_;
-	int32_t envelope_q15_;   // Current envelope value (0..kQ15One)
-	uint32_t stage_start_us_;
-	uint32_t stage_duration_us_;
+	EnvelopeState envelope_a_;
+	EnvelopeState envelope_b_;
 	bool button_b_prev_;
 	bool pulse_triggered_;
 };

@@ -4,11 +4,16 @@
 
 #include "fixed-point.h"
 
+namespace {
+constexpr float kEnvelopePeakSignalV = 5.0f;	// Envelope signal domain: 0..+5V.
+constexpr float kCenterVoltageV = 5.0f;		// DAC domain center for 0V signal.
+constexpr float kMaxDacVoltageV = 10.0f;
+constexpr float kGateThresholdV = 1.0f;
+}
+
 AdEnvelope::AdEnvelope()
-	: stage_(Stage::kIdle),
-	  envelope_q15_(0),
-	  stage_start_us_(0),
-	  stage_duration_us_(0),
+	: envelope_a_{Stage::kIdle, 0, 0, 0, false},
+	  envelope_b_{Stage::kIdle, 0, 0, 0, false},
 	  button_b_prev_(false),
 	  pulse_triggered_(false) {}
 
@@ -33,94 +38,60 @@ void AdEnvelope::update(brain::ui::Pots& pots, brain::io::AudioCvIn& cv_in,
 	uint32_t decay_us = pot_to_time_us(pots.get(kPotDecay));
 	uint16_t shape_q15 = fixed_point::u8_to_q15(pots.get(kPotShape));
 
-	// CV modulation: CV In A modulates attack time (±50%)
-	// get_voltage returns -10..+10V range, center at 0V
-	// Map: 0V = no modulation, +5V = halve time, -5V = double time
-	float cv_mod = cv_in.get_voltage_channel_a();
-	if (cv_mod > 0.5f || cv_mod < -0.5f) {
-		// Scale factor: 1.0 at 0V, 0.5 at +5V, 2.0 at -5V
-		float scale = 1.0f - (cv_mod / 10.0f);
-		if (scale < 0.1f) scale = 0.1f;
-		if (scale > 4.0f) scale = 4.0f;
-		attack_us = static_cast<uint32_t>(static_cast<float>(attack_us) * scale);
-		if (attack_us < kMinTimeUs) attack_us = kMinTimeUs;
-		if (attack_us > kMaxTimeUs) attack_us = kMaxTimeUs;
+	// Trigger detection: per-channel gate rising edges, manual button, and pulse-in.
+	bool trigger_a = false;
+	bool trigger_b = false;
+	const bool gate_a_high = cv_in.get_voltage_channel_a() > kGateThresholdV;
+	const bool gate_b_high = cv_in.get_voltage_channel_b() > kGateThresholdV;
+	if (!envelope_a_.gate_prev_high && gate_a_high) {
+		trigger_a = true;
 	}
+	if (!envelope_b_.gate_prev_high && gate_b_high) {
+		trigger_b = true;
+	}
+	envelope_a_.gate_prev_high = gate_a_high;
+	envelope_b_.gate_prev_high = gate_b_high;
 
-	// Trigger detection: Button B press or Pulse In rising edge
-	bool trigger = false;
 	if (!button_b_prev_ && button_b_pressed) {
-		trigger = true;
+		trigger_a = true;
+		trigger_b = true;
 	}
 	button_b_prev_ = button_b_pressed;
 
 	if (pulse_triggered_) {
-		trigger = true;
+		trigger_a = true;
+		trigger_b = true;
 		pulse_triggered_ = false;
 	}
 
-	// Handle trigger: always restart from attack
-	if (trigger) {
-		stage_ = Stage::kAttack;
-		stage_start_us_ = now_us;
-		stage_duration_us_ = attack_us;
+	if (trigger_a) {
+		trigger_envelope(envelope_a_, now_us, attack_us);
+	}
+	if (trigger_b) {
+		trigger_envelope(envelope_b_, now_us, attack_us);
 	}
 
-	// Process envelope stages
-	switch (stage_) {
-		case Stage::kIdle:
-			envelope_q15_ = 0;
-			break;
+	const bool eoc_a = process_envelope(envelope_a_, now_us, decay_us, shape_q15);
+	const bool eoc_b = process_envelope(envelope_b_, now_us, decay_us, shape_q15);
+	pulse.set(eoc_a || eoc_b);
 
-		case Stage::kAttack: {
-			uint32_t elapsed_us = now_us - stage_start_us_;
-			if (elapsed_us >= stage_duration_us_) {
-				// Attack complete, transition to decay
-				envelope_q15_ = kQ15One;
-				stage_ = Stage::kDecay;
-				stage_start_us_ = now_us;
-				stage_duration_us_ = decay_us;
-			} else {
-				// Linear position 0..kQ15One
-				int32_t linear_q15 = static_cast<int32_t>(
-					(static_cast<int64_t>(elapsed_us) * kQ15One) / stage_duration_us_);
-				envelope_q15_ = apply_shape(linear_q15, shape_q15, true);
-			}
-			break;
-		}
+	// Clamp and convert unipolar envelope signal (0..+5V) into DAC domain around +5V center.
+	envelope_a_.envelope_q15 = fixed_point::clamp_i32(envelope_a_.envelope_q15, 0, kQ15One);
+	envelope_b_.envelope_q15 = fixed_point::clamp_i32(envelope_b_.envelope_q15, 0, kQ15One);
+	const float envelope_a_signal_v = static_cast<float>(envelope_a_.envelope_q15) *
+									  kEnvelopePeakSignalV / static_cast<float>(kQ15One);
+	const float envelope_b_signal_v = static_cast<float>(envelope_b_.envelope_q15) *
+									  kEnvelopePeakSignalV / static_cast<float>(kQ15One);
+	float out_a_voltage = envelope_a_signal_v + kCenterVoltageV;
+	float out_b_voltage = envelope_b_signal_v + kCenterVoltageV;
+	if (out_a_voltage < 0.0f) out_a_voltage = 0.0f;
+	if (out_a_voltage > kMaxDacVoltageV) out_a_voltage = kMaxDacVoltageV;
+	if (out_b_voltage < 0.0f) out_b_voltage = 0.0f;
+	if (out_b_voltage > kMaxDacVoltageV) out_b_voltage = kMaxDacVoltageV;
 
-		case Stage::kDecay: {
-			uint32_t elapsed_us = now_us - stage_start_us_;
-			if (elapsed_us >= stage_duration_us_) {
-				// Decay complete, back to idle
-				envelope_q15_ = 0;
-				stage_ = Stage::kIdle;
-				// EOC trigger: pulse output
-				pulse.set(true);
-			} else {
-				// Linear position kQ15One..0 (inverted)
-				int32_t linear_q15 = kQ15One - static_cast<int32_t>(
-					(static_cast<int64_t>(elapsed_us) * kQ15One) / stage_duration_us_);
-				envelope_q15_ = apply_shape(linear_q15, shape_q15, false);
-			}
-			// Clear EOC pulse after a short time
-			if (elapsed_us > 0) {
-				pulse.set(false);
-			}
-			break;
-		}
-	}
-
-	// Clamp
-	envelope_q15_ = fixed_point::clamp_i32(envelope_q15_, 0, kQ15One);
-
-	// Convert to voltage: 0..kQ15One → 0.0..10.0V
-	// Output on both channels (same envelope)
-	float out_voltage = static_cast<float>(envelope_q15_) * 10.0f / static_cast<float>(kQ15One);
-
-	cv_out.set_voltage(brain::io::AudioCvOutChannel::kChannelA, out_voltage);
-	cv_out.set_voltage(brain::io::AudioCvOutChannel::kChannelB, out_voltage);
-	led_controller.render_output_vu(leds, out_voltage, out_voltage);
+	cv_out.set_voltage(brain::io::AudioCvOutChannel::kChannelA, out_a_voltage);
+	cv_out.set_voltage(brain::io::AudioCvOutChannel::kChannelB, out_b_voltage);
+	led_controller.render_output_vu(leds, out_a_voltage, out_b_voltage);
 }
 
 uint32_t AdEnvelope::pot_to_time_us(uint8_t pot_value) {
@@ -154,4 +125,50 @@ int32_t AdEnvelope::apply_shape(int32_t linear_pos_q15, uint16_t shape_q15, bool
 
 	// Blend linear and exponential based on shape pot
 	return fixed_point::blend_q15(linear_pos_q15, exp_pos_q15, shape_q15);
+}
+
+void AdEnvelope::trigger_envelope(EnvelopeState& state, uint32_t now_us, uint32_t attack_us) {
+	state.stage = Stage::kAttack;
+	state.stage_start_us = now_us;
+	state.stage_duration_us = attack_us;
+}
+
+bool AdEnvelope::process_envelope(EnvelopeState& state, uint32_t now_us, uint32_t decay_us,
+								  uint16_t shape_q15) {
+	switch (state.stage) {
+		case Stage::kIdle:
+			state.envelope_q15 = 0;
+			return false;
+
+		case Stage::kAttack: {
+			uint32_t elapsed_us = now_us - state.stage_start_us;
+			if (elapsed_us >= state.stage_duration_us) {
+				// Attack complete, transition to decay.
+				state.envelope_q15 = kQ15One;
+				state.stage = Stage::kDecay;
+				state.stage_start_us = now_us;
+				state.stage_duration_us = decay_us;
+			} else {
+				int32_t linear_q15 = static_cast<int32_t>(
+					(static_cast<int64_t>(elapsed_us) * kQ15One) / state.stage_duration_us);
+				state.envelope_q15 = apply_shape(linear_q15, shape_q15, true);
+			}
+			return false;
+		}
+
+		case Stage::kDecay: {
+			uint32_t elapsed_us = now_us - state.stage_start_us;
+			if (elapsed_us >= state.stage_duration_us) {
+				// Decay complete, back to idle.
+				state.envelope_q15 = 0;
+				state.stage = Stage::kIdle;
+				return true;
+			}
+			int32_t linear_q15 = kQ15One - static_cast<int32_t>(
+				(static_cast<int64_t>(elapsed_us) * kQ15One) / state.stage_duration_us);
+			state.envelope_q15 = apply_shape(linear_q15, shape_q15, false);
+			return false;
+		}
+	}
+	return false;
 }
