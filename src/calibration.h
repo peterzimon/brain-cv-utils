@@ -3,6 +3,8 @@
 
 #include <cstdint>
 
+#include "brain-io/audio-cv-in.h"
+#include "brain-io/audio-cv-out.h"
 #include "brain-ui/leds.h"
 #include "brain-ui/pots.h"
 
@@ -27,6 +29,11 @@ public:
 
 	// Save to flash
 	void save();
+
+	// Calibration passthrough: input A->output A, input B->output B.
+	// Uses SDK voltage reads and applies live gain/offset trims.
+	void process_passthrough(brain::io::AudioCvIn& cv_in,
+							 brain::io::AudioCvOut& cv_out) const;
 
 	// Blink all LEDs for calibration mode visual feedback
 	void update_leds(brain::ui::Leds& leds);

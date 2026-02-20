@@ -100,6 +100,7 @@ void CvUtils::update() {
 	// --- Calibration mode ---
 	if (calibration_active_) {
 		calibration_.update_from_pots(pots_, button_a_pressed_, button_b_pressed_);
+		calibration_.process_passthrough(cv_in_, cv_out_);
 		calibration_.update_leds(leds_);
 		return;
 	}
@@ -163,12 +164,16 @@ void CvUtils::update_mode_leds() {
 
 void CvUtils::enter_calibration() {
 	calibration_active_ = true;
+	cv_out_.set_coupling(brain::io::AudioCvOutChannel::kChannelA, brain::io::AudioCvOutCoupling::kDcCoupled);
+	cv_out_.set_coupling(brain::io::AudioCvOutChannel::kChannelB, brain::io::AudioCvOutCoupling::kDcCoupled);
 	leds_.off_all();
 	printf("Calibration mode entered\n");
 }
 
 void CvUtils::exit_calibration() {
 	calibration_active_ = false;
+	cv_out_.set_coupling(brain::io::AudioCvOutChannel::kChannelA, brain::io::AudioCvOutCoupling::kAcCoupled);
+	cv_out_.set_coupling(brain::io::AudioCvOutChannel::kChannelB, brain::io::AudioCvOutCoupling::kAcCoupled);
 	calibration_.save();
 	leds_.off_all();
 	printf("Calibration saved, exiting\n");

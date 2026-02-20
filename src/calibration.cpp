@@ -84,6 +84,29 @@ void Calibration::save() {
 	save_to_flash();
 }
 
+void Calibration::process_passthrough(brain::io::AudioCvIn& cv_in,
+									  brain::io::AudioCvOut& cv_out) const {
+	const float in_a = cv_in.get_voltage_channel_a();
+	const float in_b = cv_in.get_voltage_channel_b();
+
+	constexpr float kDacMax = 4095.0f;
+	constexpr float kOffsetTrimToVolts = 10.0f / kDacMax;
+
+	// Direct voltage passthrough with trim correction.
+	float out_a = in_a * static_cast<float>(kCalibScale + gain_trim_a_) /
+				  static_cast<float>(kCalibScale);
+	float out_b = in_b * static_cast<float>(kCalibScale + gain_trim_b_) /
+				  static_cast<float>(kCalibScale);
+	out_a += static_cast<float>(offset_trim_a_) * kOffsetTrimToVolts;
+	out_b += static_cast<float>(offset_trim_b_) * kOffsetTrimToVolts;
+
+	out_a = out_a < 0.0f ? 0.0f : (out_a > 10.0f ? 10.0f : out_a);
+	out_b = out_b < 0.0f ? 0.0f : (out_b > 10.0f ? 10.0f : out_b);
+
+	cv_out.set_voltage(brain::io::AudioCvOutChannel::kChannelA, out_a);
+	cv_out.set_voltage(brain::io::AudioCvOutChannel::kChannelB, out_b);
+}
+
 void Calibration::update_leds(brain::ui::Leds& leds) {
 	// Blink all LEDs
 	uint32_t now = time_us_32();
