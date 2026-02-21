@@ -1,6 +1,6 @@
 # Brain CV Utils
 
-A multi-mode CV utility firmware for the [Brain](https://github.com/shmoergh/brain-sdk) Eurorack module.
+A multi-mode CV utility firmware for the [Brain](https://github.com/shmoergh/moduleur/tree/main/modules/07-brain) module in the [Shmøergh Moduleur](https://www.shmoergh.com/moduleur/).
 
 ## Modes
 
